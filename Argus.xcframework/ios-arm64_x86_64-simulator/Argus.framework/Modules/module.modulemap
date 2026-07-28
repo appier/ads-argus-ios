@@ -1,0 +1,10 @@
+framework module Argus {
+  umbrella header "Argus.h"
+  export *
+
+  module * { export * }
+}
+
+module Argus.Swift {
+  header "Argus-Swift.h"
+}
