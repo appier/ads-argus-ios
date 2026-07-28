@@ -1,7 +1,12 @@
 # Runs when an Argus release PR is merged into main (head branch release-* /
-# prerelease-*): cuts the GitHub release (tag + zipped xcframework asset for
-# direct download) and pushes the podspec to CocoaPods trunk. Can also be run
-# manually via workflow_dispatch, with per-step skips.
+# prerelease-*): cuts the GitHub release — tag argus-sdk-v<version> plus a
+# zipped Argus.xcframework asset (ArgusFramework.zip) for direct download. This
+# tag is also what SPM and the CocoaPods podspec resolve against.
+#
+# By design this repo stores NO secrets: the release is created with the
+# built-in, repo-scoped GITHUB_TOKEN. The CocoaPods trunk push (the only step
+# that needs a real credential) is a separate MANUAL workflow in the private
+# source repo (iOS_deploy_pod.yml), so no third-party secret ever lives here.
 name: Release framework
 
 on:
@@ -12,13 +17,9 @@ on:
       - 'main'
 
   workflow_dispatch:
-    inputs:
-      skip_add_tag_and_release:
-        default: false
-        type: boolean
-      skip_deploy_pod_framework:
-        default: false
-        type: boolean
+
+permissions:
+  contents: write
 
 jobs:
   release_framework:
@@ -26,18 +27,12 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       ((startsWith(github.head_ref, 'release') || startsWith(github.head_ref, 'prerelease'))
         && github.event.pull_request.merged == true)
-    environment: ENV
     runs-on: macos-latest
     steps:
 
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode_${{ vars.XCODE_VERSION }}.app/Contents/Developer
-
-    # Kept inline (ruby/setup-ruby) rather than the org's shared action so this
-    # repo has no cross-repo action dependency to authorize.
     - name: Set up Ruby and gems
       uses: ruby/setup-ruby@v1
       with:
@@ -45,13 +40,7 @@ jobs:
         bundler-cache: true
 
     - name: GitHub release
-      if: ${{ !inputs.skip_add_tag_and_release }}
       env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        # Built-in, ephemeral, repo-scoped token — nothing stored in this repo.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: bundle exec fastlane release_argus_sdk
-
-    - name: Deploy pod framework
-      if: ${{ !inputs.skip_deploy_pod_framework }}
-      env:
-        COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
-      run: bundle exec fastlane pods_argus_sdk
