@@ -1,7 +1,8 @@
 # Runs when an Argus release PR is merged into main (head branch release-* /
-# prerelease-*): cuts the GitHub release — tag argus-sdk-v<version> plus a
-# zipped Argus.xcframework asset (ArgusFramework.zip) for direct download. This
-# tag is also what SPM and the CocoaPods podspec resolve against.
+# prerelease-*): cuts the GitHub release — a plain semver tag <version> (e.g.
+# 1.0.0) plus a zipped Argus.xcframework asset (ArgusFramework.zip) for direct
+# download. Plain semver so SPM resolves it (`from: "1.0.0"`); the CocoaPods
+# podspec and direct download share the same tag.
 #
 # By design this repo stores NO secrets: the release is created with the
 # built-in, repo-scoped GITHUB_TOKEN via the GitHub CLI (`gh release`). The
@@ -45,7 +46,7 @@ jobs:
       run: |
         set -euo pipefail
         version="$(jq -r '.version' version_argus_sdk.json | sed 's/^v//')"
-        tag="argus-sdk-v${version}"
+        tag="${version}"
         zip -qr ArgusFramework.zip Argus.xcframework
         if gh release view "$tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
           echo "Release ${tag} exists — refreshing asset."
