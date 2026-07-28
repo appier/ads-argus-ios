@@ -84,7 +84,7 @@ platform :ios do
   desc "Deploy the Argus podspec to CocoaPods trunk."
   lane :pods_argus_sdk do
     Dir.chdir("..") do
-      sh "pod trunk push Argus.podspec --allow-warnings"
+      sh "pod trunk push AppierArgus.podspec --allow-warnings"
     end
   end
 
