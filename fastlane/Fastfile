@@ -1,0 +1,95 @@
+# Fastlane for the Argus binary-distribution repo (appier/ads-argus-ios).
+#
+# This repo holds the shipped Argus.xcframework plus the CocoaPods podspec and
+# SPM manifest. It mirrors appier/ads-ios-sdk. The build/test lives in the
+# private source repo (plaxieappier/appier-ads-data-signal-ios); its release CI
+# builds the signed xcframework and calls `pr_argus_sdk` here to open the
+# release PR. Merging that PR runs `release_argus_sdk` + `pods_argus_sdk`.
+#
+# Lanes:
+#   pr_argus_sdk      # open the release PR (updates Argus.xcframework + version)
+#   release_argus_sdk # tag + GitHub release with a zipped xcframework asset
+#   pods_argus_sdk    # push the podspec to CocoaPods trunk
+
+default_platform(:ios)
+
+platform :ios do
+
+  GITHUB_REPO = "appier/ads-argus-ios".freeze
+
+  before_all do
+    setup_circle_ci if ENV["CI"]
+  end
+
+  desc "Open the Argus SDK release PR (commits the new Argus.xcframework + version)."
+  lane :pr_argus_sdk do |options|
+    branch_name = options.fetch(:branch_name, "release_argus_sdk")
+    framework_version = get_framework_version_argus_sdk
+
+    # version_argus_sdk.json is the podspec's version source of truth.
+    File.write("../version_argus_sdk.json", { "version" => "v#{framework_version}" }.to_json)
+
+    sh "git checkout -b #{branch_name}"
+
+    path = [
+      "./Argus.xcframework/*",
+      "./version_argus_sdk.json"
+    ]
+    git_add(path: path)
+    git_commit(path: path, message: "Release Argus SDK #{framework_version}")
+
+    push_to_git_remote(
+      force: true,
+      local_branch: branch_name,
+      remote_branch: branch_name
+    )
+
+    github_api(
+      server_url: "https://api.github.com",
+      api_token: ENV["GITHUB_TOKEN"],
+      http_method: "POST",
+      path: "/repos/#{GITHUB_REPO}/pulls",
+      body: {
+        "head": branch_name,
+        "base": "main",
+        "title": "Release Argus SDK v#{framework_version}"
+      }
+    )
+  end
+
+  desc "Create the Argus SDK GitHub release (tag + zipped xcframework asset for direct download)."
+  lane :release_argus_sdk do
+    framework_version = get_framework_version_argus_sdk
+    tag = "argus-sdk-v#{framework_version}"
+    archive_name = "ArgusFramework.zip"
+
+    Dir.chdir("..") do
+      sh "zip -r #{archive_name} Argus.xcframework"
+    end
+
+    set_github_release(
+      repository_name: GITHUB_REPO,
+      api_token: ENV["GITHUB_TOKEN"],
+      name: "Appier Argus iOS SDK #{framework_version}",
+      tag_name: tag,
+      description: "",
+      commitish: "main",
+      upload_assets: [archive_name]
+    )
+  end
+
+  desc "Deploy the Argus podspec to CocoaPods trunk."
+  lane :pods_argus_sdk do
+    Dir.chdir("..") do
+      sh "pod trunk push Argus.podspec --allow-warnings"
+    end
+  end
+
+  # Reads the shipped framework's marketing version straight from the binary so
+  # the tag/podspec/version file can never drift from what was actually built.
+  private_lane :get_framework_version_argus_sdk do
+    plist_file = "../Argus.xcframework/ios-arm64/Argus.framework/Info.plist"
+    sh("/usr/libexec/PlistBuddy #{plist_file} -c 'Print :CFBundleShortVersionString'").strip
+  end
+
+end

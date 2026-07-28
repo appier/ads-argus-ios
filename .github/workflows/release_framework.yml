@@ -1,0 +1,57 @@
+# Runs when an Argus release PR is merged into main (head branch release-* /
+# prerelease-*): cuts the GitHub release (tag + zipped xcframework asset for
+# direct download) and pushes the podspec to CocoaPods trunk. Can also be run
+# manually via workflow_dispatch, with per-step skips.
+name: Release framework
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - 'main'
+
+  workflow_dispatch:
+    inputs:
+      skip_add_tag_and_release:
+        default: false
+        type: boolean
+      skip_deploy_pod_framework:
+        default: false
+        type: boolean
+
+jobs:
+  release_framework:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      ((startsWith(github.head_ref, 'release') || startsWith(github.head_ref, 'prerelease'))
+        && github.event.pull_request.merged == true)
+    environment: ENV
+    runs-on: macos-latest
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_${{ vars.XCODE_VERSION }}.app/Contents/Developer
+
+    # Kept inline (ruby/setup-ruby) rather than the org's shared action so this
+    # repo has no cross-repo action dependency to authorize.
+    - name: Set up Ruby and gems
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: "3.2.1"
+        bundler-cache: true
+
+    - name: GitHub release
+      if: ${{ !inputs.skip_add_tag_and_release }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: bundle exec fastlane release_argus_sdk
+
+    - name: Deploy pod framework
+      if: ${{ !inputs.skip_deploy_pod_framework }}
+      env:
+        COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+      run: bundle exec fastlane pods_argus_sdk
