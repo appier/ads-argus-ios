@@ -9,8 +9,6 @@
 # CocoaPods trunk push (the only step that needs a real credential) is a
 # separate MANUAL workflow in the private source repo (iOS_deploy_pod.yml), so
 # no third-party secret ever lives here.
-#
-# Also runnable manually (workflow_dispatch) as a re-run/fallback.
 name: Release framework
 
 on:
@@ -20,17 +18,14 @@ on:
     branches:
       - 'main'
 
-  workflow_dispatch:
-
 permissions:
   contents: write
 
 jobs:
   release_framework:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      ((startsWith(github.head_ref, 'release') || startsWith(github.head_ref, 'prerelease'))
-        && github.event.pull_request.merged == true)
+      (startsWith(github.head_ref, 'release') || startsWith(github.head_ref, 'prerelease'))
+        && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
 
