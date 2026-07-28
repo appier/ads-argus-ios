@@ -4,9 +4,12 @@
 # tag is also what SPM and the CocoaPods podspec resolve against.
 #
 # By design this repo stores NO secrets: the release is created with the
-# built-in, repo-scoped GITHUB_TOKEN. The CocoaPods trunk push (the only step
-# that needs a real credential) is a separate MANUAL workflow in the private
-# source repo (iOS_deploy_pod.yml), so no third-party secret ever lives here.
+# built-in, repo-scoped GITHUB_TOKEN via the GitHub CLI (`gh release`). The
+# CocoaPods trunk push (the only step that needs a real credential) is a
+# separate MANUAL workflow in the private source repo (iOS_deploy_pod.yml), so
+# no third-party secret ever lives here.
+#
+# Also runnable manually (workflow_dispatch) as a re-run/fallback.
 name: Release framework
 
 on:
@@ -27,20 +30,31 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       ((startsWith(github.head_ref, 'release') || startsWith(github.head_ref, 'prerelease'))
         && github.event.pull_request.merged == true)
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
 
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Ruby and gems
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: "3.2.1"
-        bundler-cache: true
-
+    # Create the release with the built-in token via gh (reliable with the
+    # repo-scoped GITHUB_TOKEN; contents:write covers the tag + release + asset).
+    # Idempotent so a manual re-run just refreshes the asset.
     - name: GitHub release
       env:
-        # Built-in, ephemeral, repo-scoped token — nothing stored in this repo.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: bundle exec fastlane release_argus_sdk
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        version="$(jq -r '.version' version_argus_sdk.json | sed 's/^v//')"
+        tag="argus-sdk-v${version}"
+        zip -qr ArgusFramework.zip Argus.xcframework
+        if gh release view "$tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+          echo "Release ${tag} exists — refreshing asset."
+          gh release upload "$tag" ArgusFramework.zip --repo "${GITHUB_REPOSITORY}" --clobber
+        else
+          gh release create "$tag" ArgusFramework.zip \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Appier Argus iOS SDK ${version}" \
+            --notes "" \
+            --target main
+        fi
+        echo "Released ${tag}"
