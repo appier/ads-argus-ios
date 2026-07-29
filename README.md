@@ -58,7 +58,7 @@ Embedded Content** with **Embed & Sign**.
 ```swift
 import Argus
 
-let argus = Argus()
+let argus = ArgusSDK()
 let ext: Data = argus.getData()
 ```
 
