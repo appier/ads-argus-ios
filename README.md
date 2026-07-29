@@ -59,7 +59,7 @@ Embedded Content** with **Embed & Sign**.
 import Argus
 
 let argus = Argus()
-let ext: Data = argus.getData()   // ~40 device signals as ext-shaped JSON
+let ext: Data = argus.getData()
 ```
 
 See the SDK documentation for the full public API.
